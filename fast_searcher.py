@@ -32,13 +32,13 @@ class FastSearcher:
             #out_queue.put_nowait(result) 
             lst.append(result)
 
+
 def start_new_process(target, in_queue : Queue, out_queue : Queue):
     process = Process(target=target, args=(in_queue, out_queue))
     process.start()
 
     return process
 
-    
 
 class ProcessData:
     def __init__(self, process : Process, in_queue : Queue, out_queue : Queue) -> None:
@@ -52,63 +52,68 @@ class ProcessData:
         self.in_queue.close()
         self.out_queue.close()
 
-def wait_until(cond, timeout):
-    end = time.time() + timeout
-    while time.time() < end:
-        if cond():
-            return True
-        time.sleep(0.25)
+def init_data(data_src, ratio, cnt):
+    data = pd.read_csv(data_src)['Word'].to_list()
 
-    return False
+    fast = FastSearcher(data, ratio)
 
-
-def main():
-    data = pd.read_csv('./dict/russian.txt',)['Word'].to_list()
-
-    fast = FastSearcher(data, 0.75)
-
-
-    workers_cnt = 10
+    workers_cnt = cnt
     span_len = len(fast.dict) // workers_cnt
     positions = [[(i - 1) * span_len, i * span_len] for i in range(1, workers_cnt)] + [[(workers_cnt - 1) * span_len, len(fast.dict)]]
 
+    return fast.search, positions
+
+
+def init_processbag(target, cnt):
     process_bag : list[ProcessData] = []
     print("Initialize process bag")
-    for i in range(workers_cnt):
-        print(f'{i}/{workers_cnt}', end='\r')
+    for i in range(cnt):
+        print(f'{i + 1}/{cnt}', end='\r')
         in_queue = Queue()
         out_queue = Queue()
-        process = start_new_process(fast.search, in_queue, out_queue)
+        process = start_new_process(target, in_queue, out_queue)
         process_bag.append(ProcessData(process, in_queue, out_queue))
 
+    return process_bag
 
-    while True:
-        inp = input("Word: ")
-        if len(inp) == 0:
-            break
+def find_async(word, process_bag : list[ProcessData], positions):
+    cnt = len(process_bag)
+    manager = Manager()
+    results = manager.list()
 
-        # pos pos word
-        manager = Manager()
-        results = manager.list()
-        t = time.time()
-        for i, proc in enumerate(process_bag):
-            pos = positions[i]
-            proc.in_queue.put([results, pos[0], pos[1], inp])
+    for i, proc in enumerate(process_bag):
+        pos = positions[i]
+        proc.in_queue.put([results, pos[0], pos[1], word])
 
-        while len(results) != workers_cnt:
-            time.sleep(0.25)
-            pass
-
-        print(results)
-        print(time.time() - t)
+    while len(results) != cnt:
+        time.sleep(0.25)
 
 
-    input("enter to finish proc")
-    for proc in process_bag:
-        proc.finish()
+    out_arr = []
+    for res in results:
+        out_arr.extend(res)
     
-    print("end")
+    return out_arr
 
 
-if __name__ == '__main__':
-    main()
+# def main():
+#     target, positions = init_data('./dict/russian.txt', 0.75)
+#     proc_bag = init_processbag(target, len(positions))
+
+    
+#     while True:
+#         inp = input("Word: ")
+#         if len(inp) == 0:
+#             break
+        
+#         print(find_async(inp, proc_bag, positions))
+
+#     input("enter to finish proc")
+#     for proc in proc_bag:
+#         proc.finish()
+    
+#     print("end")
+
+
+# if __name__ == '__main__':
+#     main()
