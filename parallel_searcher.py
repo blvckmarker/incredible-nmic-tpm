@@ -46,8 +46,9 @@ class ProcessData:
         self.in_queue = in_queue
         self.out_queue = out_queue
 
-    def finish(self):
+    def terminate(self):
         #self.process.join(timeout=0.1)
+        print(f'Terminate {self.process.pid} process')
         self.process.terminate()
         self.in_queue.close()
         self.out_queue.close()
